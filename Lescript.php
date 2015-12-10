@@ -365,9 +365,9 @@ class Client
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($handle, CURLOPT_HEADER, true);
 
-        // DO NOT DO THAT
-        curl_setopt($handle, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($handle, CURLOPT_SSL_VERIFYPEER, false);
+        // DO NOT DO THAT!
+        // curl_setopt($handle, CURLOPT_SSL_VERIFYHOST, false);
+        // curl_setopt($handle, CURLOPT_SSL_VERIFYPEER, false);
 
         switch ($method) {
             case 'GET':

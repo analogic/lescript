@@ -7,7 +7,7 @@ easy to use PHP file without dependencies.
 
 ## Usage
 
-See commented content of Lescript.php and example.php. Please rewrite files to fit your needs - purpose of this library is not to use as it is nor use it in production!
+See commented content of **Lescript.php** and **example.php**. Please rewrite files to fit your needs - purpose of this library is not to use as it is nor use it in production!
 
 ## Requirements
 
