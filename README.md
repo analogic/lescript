@@ -22,6 +22,6 @@ Curl extension
 If you prefer more robust and clean library see excelent https://github.com/kelunik/acme
 
 
-## Ad
+## Why i created lescript?
 
-Do you want your own hosted mailserver solution - try [Poste.io](https://poste.io)!
+Beacause of implementation of Let's encrypt to [Poste.io](https://poste.io)!
