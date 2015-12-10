@@ -1,6 +1,6 @@
 # Simple Let's encrypt client concept in PHP
 
-Lescript is simplified concept of ACME client implementation especially for Let's encrypt service. Its goal to have one 
+Lescript is simplified concept of ACME client implementation especially for Let's encrypt service. It's goal is to have one 
 easy to use PHP file without dependencies. 
 
 **Use at your own risk.**
