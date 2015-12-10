@@ -11,7 +11,7 @@ $logger = new Logger();
 
 try {
 
-    $le = new Lescript('/ceritificate/storage', '/var/www/test.com', $logger);
+    $le = new Lescript('/certificate/storage', '/var/www/test.com', $logger);
     $le->initAccount();
     $le->signDomains(array('test.com', 'www.test.com'));
 
