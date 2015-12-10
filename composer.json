@@ -1,0 +1,11 @@
+{
+  "name": "analogic/lescript",
+  "description": "Lescript is simplified concept of ACME client implementation especially for Let's encrypt service. It's goal is to have one easy to use PHP file without dependencies.",
+  "type": "library",
+  "keywords": [
+    "encryption","letsencrypt"
+  ],
+  "autoload": {
+    "files": ["Lescript.php"]
+  }
+}
