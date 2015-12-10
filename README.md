@@ -24,4 +24,4 @@ If you prefer more robust and clean library see excelent https://github.com/kelu
 
 ## Why i created lescript?
 
-Beacause of implementation of Let's encrypt to [Poste.io](https://poste.io)!
+Because of implementation of Let's encrypt to [Poste.io](https://poste.io)!
