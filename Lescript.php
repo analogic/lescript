@@ -1,26 +1,28 @@
 <?php
 
+namespace Analogic\ACME;
+
 class Lescript
 {
     public $ca = 'https://acme-v01.api.letsencrypt.org';
     // public $ca = 'https://acme-staging.api.letsencrypt.org'; // testing
     public $license = 'https://letsencrypt.org/documents/LE-SA-v1.0.1-July-27-2015.pdf';
-    public $country_code = 'CZ';
+    public $countryCode = 'CZ';
     public $state = "Czech Republic";
 
-    private $certificates_dir;
-    private $web_root_dir;
+    private $certificatesDir;
+    private $webRootDir;
     private $logger;
     private $client;
-    private $account_key_path;
+    private $accountKeyPath;
 
-    public function __construct($certificates_dir, $web_root_dir, $logger)
+    public function __construct($certificatesDir, $webRootDir, $logger)
     {
-        $this->certificates_dir = $certificates_dir;
-        $this->web_root_dir = $web_root_dir;
+        $this->certificatesDir = $certificatesDir;
+        $this->webRootDir = $webRootDir;
         $this->logger = $logger;
         $this->client = new Client($this->ca);
-        $this->account_key_path = $certificates_dir.'/_account/private.pem';
+        $this->accountKeyPath = $certificatesDir.'/_account/private.pem';
     }
 
     public function initAccount()
@@ -30,8 +32,8 @@ class Lescript
         // generate and save new private key for account
         // ---------------------------------------------
 
-        if(!is_file($this->account_key_path)) {
-            $this->generateKey(dirname($this->account_key_path));
+        if(!is_file($this->accountKeyPath)) {
+            $this->generateKey(dirname($this->accountKeyPath));
         }
 
         // send registration
@@ -42,11 +44,11 @@ class Lescript
         $this->logger->info('New account certificate registered');
     }
 
-    public function signDomains($domains)
+    public function signDomains(array $domains)
     {
         $this->logger->info('Starting certificate generation process for domains');
 
-        if(($privateAccountKey = openssl_pkey_get_private('file://'.$this->account_key_path)) === FALSE) {
+        if(($privateAccountKey = openssl_pkey_get_private('file://'.$this->accountKeyPath)) === FALSE) {
             throw new \RuntimeException(openssl_error_string());
         }
         $accountKeyDetails = openssl_pkey_get_details($privateAccountKey);
@@ -77,11 +79,11 @@ class Lescript
             // 2. saving authentication token for web verification
             // ---------------------------------------------------
 
-            $directory = $this->web_root_dir.'/.well-known/acme-challenge';
-            $token_path = $directory.'/'.$challenge['token'];
+            $directory = $this->webRootDir.'/.well-known/acme-challenge';
+            $tokenPath = $directory.'/'.$challenge['token'];
 
             if(!file_exists($directory) && !@mkdir($directory, 0755, true)) {
-                throw new \RuntimeException("Couldn't create directory to expose challenge: ${token_path}");
+                throw new \RuntimeException("Couldn't create directory to expose challenge: ${tokenPath}");
             }
 
             $header = array(
@@ -93,15 +95,15 @@ class Lescript
             );
             $payload = $challenge['token'] . '.' . Base64UrlSafeEncoder::encode(hash('sha256', json_encode($header), true));
 
-            file_put_contents($token_path, $payload);
-            chmod($token_path, 0644);
+            file_put_contents($tokenPath, $payload);
+            chmod($tokenPath, 0644);
 
             // 3. verification process itself
             // -------------------------------
 
             $uri = "http://${domain}/.well-known/acme-challenge/${challenge['token']}";
 
-            $this->logger->info("Token for $domain saved at $token_path and should be available at $uri");
+            $this->logger->info("Token for $domain saved at $tokenPath and should be available at $uri");
 
             // simple self check
             if($payload !== trim(@file_get_contents($uri))) {
@@ -138,7 +140,7 @@ class Lescript
             } while (!$ended);
 
             $this->logger->info("Verification ended with status: ${result['status']}");
-            @unlink($token_path);
+            @unlink($tokenPath);
         }
 
         // requesting certificate
@@ -221,7 +223,7 @@ class Lescript
 
     private function getDomainPath($domain)
     {
-        return $this->certificates_dir.'/'.$domain.'/';
+        return $this->certificatesDir.'/'.$domain.'/';
     }
 
     private  function postNewReg()
@@ -262,7 +264,7 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
             array(
                 "CN" => $domain,
                 "ST" => $this->state,
-                "C" => $this->country_code,
+                "C" => $this->countryCode,
                 "O" => "Unknown",
             ),
             $privateKey,
@@ -283,7 +285,7 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
         return trim(Base64UrlSafeEncoder::encode(base64_decode($matches[1])));
     }
 
-    private function generateKey($output_directory)
+    private function generateKey($outputDirectory)
     {
         $res = openssl_pkey_new(array(
             "private_key_type" => OPENSSL_KEYTYPE_RSA,
@@ -296,16 +298,16 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
 
         $details = openssl_pkey_get_details($res);
 
-        if(!is_dir($output_directory)) @mkdir($output_directory, 0700, true);
-        if(!is_dir($output_directory)) throw new \RuntimeException("Cant't create directory $output_directory");
+        if(!is_dir($outputDirectory)) @mkdir($outputDirectory, 0700, true);
+        if(!is_dir($outputDirectory)) throw new \RuntimeException("Cant't create directory $outputDirectory");
 
-        file_put_contents($output_directory.'/private.pem', $privateKey);
-        file_put_contents($output_directory.'/public.pem', $details['key']);
+        file_put_contents($outputDirectory.'/private.pem', $privateKey);
+        file_put_contents($outputDirectory.'/public.pem', $details['key']);
     }
 
     private function signedRequest($uri, array $payload) {
 
-        if(($privateKey = openssl_pkey_get_private('file://'.$this->account_key_path)) === FALSE) {
+        if(($privateKey = openssl_pkey_get_private('file://'.$this->accountKeyPath)) === FALSE) {
             throw new \RuntimeException(openssl_error_string());
         }
 
@@ -346,8 +348,8 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
 
 class Client
 {
-    private $last_code;
-    private $last_header;
+    private $lastCode;
+    private $lastHeader;
 
     private $base;
 
@@ -391,8 +393,8 @@ class Client
         $header = substr($response, 0, $header_size);
         $body = substr($response, $header_size);
 
-        $this->last_header = $header;
-        $this->last_code = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+        $this->lastHeader = $header;
+        $this->lastCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
 
         $data = json_decode($body, true);
         return $data === null ? $body : $data;
@@ -410,7 +412,7 @@ class Client
 
     public function getLastNonce()
     {
-        if(preg_match('~Replay\-Nonce: (.+)~i', $this->last_header, $matches)) {
+        if(preg_match('~Replay\-Nonce: (.+)~i', $this->lastHeader, $matches)) {
             return trim($matches[1]);
         }
 
@@ -420,7 +422,7 @@ class Client
 
     public function getLastLocation()
     {
-        if(preg_match('~Location: (.+)~i', $this->last_header, $matches)) {
+        if(preg_match('~Location: (.+)~i', $this->lastHeader, $matches)) {
             return trim($matches[1]);
         }
         return null;
@@ -428,12 +430,12 @@ class Client
 
     public function getLastCode()
     {
-        return $this->last_code;
+        return $this->lastCode;
     }
 
     public function getLastLinks()
     {
-        preg_match_all('~Link: <(.+)>;rel="up"~', $this->last_header, $matches);
+        preg_match_all('~Link: <(.+)>;rel="up"~', $this->lastHeader, $matches);
         return $matches[1];
     }
 }
