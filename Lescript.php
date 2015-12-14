@@ -148,7 +148,7 @@ class Lescript
         $domainPath = $this->getDomainPath(reset($domains));
 
         // generate private key for domain if not exist
-        if(!is_dir($domainPath)) {
+        if(!is_dir($domainPath) || !is_file($domainPath.'/private.pem')) {
             $this->generateKey($domainPath);
         }
 
