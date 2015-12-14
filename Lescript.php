@@ -27,21 +27,21 @@ class Lescript
 
     public function initAccount()
     {
-        $this->logger->info('Starting new account registration');
-
-        // generate and save new private key for account
-        // ---------------------------------------------
-
         if(!is_file($this->accountKeyPath)) {
+
+            // generate and save new private key for account
+            // ---------------------------------------------
+
+            $this->logger->info('Starting new account registration');
             $this->generateKey(dirname($this->accountKeyPath));
+            $this->postNewReg();
+            $this->logger->info('New account certificate registered');
+
+        } else {
+
+            $this->logger->info('Account already registered. Continuing.');
+
         }
-
-        // send registration
-        // -----------------
-
-        $this->postNewReg();
-
-        $this->logger->info('New account certificate registered');
     }
 
     public function signDomains(array $domains)
