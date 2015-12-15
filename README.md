@@ -1,5 +1,7 @@
 # Simple Let's encrypt client concept in PHP
 
+*Notice: lescript is standalone part of [LEManager](https://github.com/analogic/lemanager)*
+
 Lescript is simplified concept of ACME client implementation especially for Let's Encrypt service. It's goal is to have one 
 easy to use PHP file without dependencies. 
 
