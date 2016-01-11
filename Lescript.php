@@ -391,9 +391,6 @@ class Client
                 curl_setopt($handle, CURLOPT_POST, true);
                 curl_setopt($handle, CURLOPT_POSTFIELDS, $data);
                 break;
-            case 'HEAD':
-                curl_setopt($handle, CURLOPT_CUSTOMREQUEST, 'HEAD');
-                break;
         }
         $response = curl_exec($handle);
 
@@ -429,7 +426,7 @@ class Client
             return trim($matches[1]);
         }
 
-        $this->curl('HEAD', '/directory');
+        $this->curl('GET', '/directory');
         return $this->getLastNonce();
     }
 
