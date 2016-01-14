@@ -330,10 +330,10 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
         $protected["nonce"] = $this->client->getLastNonce();
 
 
-        $payload64 = Base64UrlSafeEncoder::encode(json_encode($payload, JSON_UNESCAPED_SLASHES));
+        $payload64 = Base64UrlSafeEncoder::encode(str_replace('\\/', '/', json_encode($payload)));
         $protected64 = Base64UrlSafeEncoder::encode(json_encode($protected));
 
-        openssl_sign($protected64.'.'.$payload64, $signed, $privateKey, OPENSSL_ALGO_SHA256);
+        openssl_sign($protected64.'.'.$payload64, $signed, $privateKey, "SHA256");
 
         $signed64 = Base64UrlSafeEncoder::encode($signed);
 
@@ -348,8 +348,8 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
 
         return $this->client->post($uri, json_encode($data));
     }
-    
-    protected function log($message) 
+
+    protected function log($message)
     {
         if($this->logger) {
             $this->logger->info($message);
