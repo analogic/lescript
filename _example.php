@@ -1,7 +1,7 @@
 <?php
 
-if(!defined("PHP_VERSION_ID") || PHP_VERSION_ID < 50408 || !extension_loaded('openssl') || !extension_loaded('curl')) {
-    die("You need at least PHP 5.4.8 with OpenSSL and curl extension\n");
+if(!defined("PHP_VERSION_ID") || PHP_VERSION_ID < 50300 || !extension_loaded('openssl') || !extension_loaded('curl')) {
+    die("You need at least PHP 5.3.0 with OpenSSL and curl extension\n");
 }
 require 'Lescript.php';
 
