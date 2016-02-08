@@ -24,12 +24,12 @@ class Lescript
         $this->webRootDir = $webRootDir;
         $this->logger = $logger;
         $this->client = new Client($this->ca);
-        $this->accountKeyPath = $certificatesDir.'/_account/private.pem';
+        $this->accountKeyPath = $certificatesDir . '/_account/private.pem';
     }
 
     public function initAccount()
     {
-        if(!is_file($this->accountKeyPath)) {
+        if (!is_file($this->accountKeyPath)) {
 
             // generate and save new private key for account
             // ---------------------------------------------
@@ -46,7 +46,7 @@ class Lescript
         }
     }
 
-    public function signDomains(array $domains)
+    public function signDomains(array $domains, $reuseCsr = false)
     {
         $this->log('Starting certificate generation process for domains');
 
@@ -56,7 +56,7 @@ class Lescript
         // start domains authentication
         // ----------------------------
 
-        foreach($domains as $domain) {
+        foreach ($domains as $domain) {
 
             // 1. getting available authentication options
             // -------------------------------------------
@@ -69,8 +69,10 @@ class Lescript
             );
 
             // choose http-01 challange only
-            $challenge = array_reduce($response['challenges'], function($v, $w) { return $v ? $v : ($w['type'] == 'http-01' ? $w : false); });
-            if(!$challenge) throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
+            $challenge = array_reduce($response['challenges'], function ($v, $w) {
+                return $v ? $v : ($w['type'] == 'http-01' ? $w : false);
+            });
+            if (!$challenge) throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
 
             $this->log("Got challenge token for $domain");
             $location = $this->client->getLastLocation();
@@ -79,10 +81,10 @@ class Lescript
             // 2. saving authentication token for web verification
             // ---------------------------------------------------
 
-            $directory = $this->webRootDir.'/.well-known/acme-challenge';
-            $tokenPath = $directory.'/'.$challenge['token'];
+            $directory = $this->webRootDir . '/.well-known/acme-challenge';
+            $tokenPath = $directory . '/' . $challenge['token'];
 
-            if(!file_exists($directory) && !@mkdir($directory, 0755, true)) {
+            if (!file_exists($directory) && !@mkdir($directory, 0755, true)) {
                 throw new \RuntimeException("Couldn't create directory to expose challenge: ${tokenPath}");
             }
 
@@ -106,7 +108,7 @@ class Lescript
             $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
 
             // simple self check
-            if($payload !== trim(@file_get_contents($uri))) {
+            if ($payload !== trim(@file_get_contents($uri))) {
                 throw new \RuntimeException("Please check $uri - token not available");
             }
 
@@ -125,12 +127,12 @@ class Lescript
 
             // waiting loop
             do {
-                if(empty($result['status']) || $result['status'] == "invalid") {
-                    throw new \RuntimeException("Verification ended with error: ".json_encode($result));
+                if (empty($result['status']) || $result['status'] == "invalid") {
+                    throw new \RuntimeException("Verification ended with error: " . json_encode($result));
                 }
                 $ended = !($result['status'] === "pending");
 
-                if(!$ended) {
+                if (!$ended) {
                     $this->log("Verification pending, sleeping 1s");
                     sleep(1);
                 }
@@ -148,33 +150,37 @@ class Lescript
         $domainPath = $this->getDomainPath(reset($domains));
 
         // generate private key for domain if not exist
-        if(!is_dir($domainPath) || !is_file($domainPath.'/private.pem')) {
+        if (!is_dir($domainPath) || !is_file($domainPath . '/private.pem')) {
             $this->generateKey($domainPath);
         }
 
         // load domain key
-        $privateDomainKey = $this->readPrivateKey($domainPath.'/private.pem');
+        $privateDomainKey = $this->readPrivateKey($domainPath . '/private.pem');
 
         $this->client->getLastLinks();
+
+        $csr = $reuseCsr && is_file($domainPath . "/last.csr")?
+            $this->getCsrContent($domainPath . "/last.csr") :
+            $this->generateCSR($privateDomainKey, $domains);
 
         // request certificates creation
         $result = $this->signedRequest(
             "/acme/new-cert",
-            array('resource' => 'new-cert', 'csr' => $this->generateCSR($privateDomainKey, $domains))
+            array('resource' => 'new-cert', 'csr' => $csr)
         );
         if ($this->client->getLastCode() !== 201) {
-            throw new \RuntimeException("Invalid response code: ".$this->client->getLastCode().", ".json_encode($result));
+            throw new \RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($result));
         }
         $location = $this->client->getLastLocation();
 
         // waiting loop
         $certificates = array();
-        while(1) {
+        while (1) {
             $this->client->getLastLinks();
 
             $result = $this->client->get($location);
 
-            if($this->client->getLastCode() == 202) {
+            if ($this->client->getLastCode() == 202) {
 
                 $this->log("Certificate generation pending, sleeping 1s");
                 sleep(1);
@@ -185,7 +191,7 @@ class Lescript
                 $certificates[] = $this->parsePemFromBody($result);
 
 
-                foreach($this->client->getLastLinks() as $link) {
+                foreach ($this->client->getLastLinks() as $link) {
                     $this->log("Requesting chained cert at $link");
                     $result = $this->client->get($link);
                     $certificates[] = $this->parsePemFromBody($result);
@@ -194,28 +200,28 @@ class Lescript
                 break;
             } else {
 
-                throw new \RuntimeException("Can't get certificate: HTTP code ".$this->client->getLastCode());
+                throw new \RuntimeException("Can't get certificate: HTTP code " . $this->client->getLastCode());
 
             }
         }
 
-        if(empty($certificates)) throw new \RuntimeException('No certificates generated');
+        if (empty($certificates)) throw new \RuntimeException('No certificates generated');
 
         $this->log("Saving fullchain.pem");
-        file_put_contents($domainPath.'/fullchain.pem', implode("\n", $certificates));
+        file_put_contents($domainPath . '/fullchain.pem', implode("\n", $certificates));
 
         $this->log("Saving cert.pem");
-        file_put_contents($domainPath.'/cert.pem', array_shift($certificates));
+        file_put_contents($domainPath . '/cert.pem', array_shift($certificates));
 
         $this->log("Saving chain.pem");
-        file_put_contents($domainPath."/chain.pem", implode("\n", $certificates));
+        file_put_contents($domainPath . "/chain.pem", implode("\n", $certificates));
 
         $this->log("Done !!§§!");
     }
 
     private function readPrivateKey($path)
     {
-        if(($key = openssl_pkey_get_private('file://'.$path)) === FALSE) {
+        if (($key = openssl_pkey_get_private('file://' . $path)) === FALSE) {
             throw new \RuntimeException(openssl_error_string());
         }
 
@@ -230,10 +236,10 @@ class Lescript
 
     private function getDomainPath($domain)
     {
-        return $this->certificatesDir.'/'.$domain.'/';
+        return $this->certificatesDir . '/' . $domain . '/';
     }
 
-    private  function postNewReg()
+    private function postNewReg()
     {
         $this->log('Sending registration to letsencrypt server');
 
@@ -246,14 +252,16 @@ class Lescript
     private function generateCSR($privateKey, array $domains)
     {
         $domain = reset($domains);
-        $san = implode(",", array_map(function ($dns) { return "DNS:" . $dns; }, $domains));
+        $san = implode(",", array_map(function ($dns) {
+            return "DNS:" . $dns;
+        }, $domains));
         $tmpConf = tmpfile();
-        $tmpConfMeta =  stream_get_meta_data($tmpConf);
+        $tmpConfMeta = stream_get_meta_data($tmpConf);
         $tmpConfPath = $tmpConfMeta["uri"];
 
         // workaround to get SAN working
         fwrite($tmpConf,
-'HOME = .
+            'HOME = .
 RANDFILE = $ENV::HOME/.rnd
 [ req ]
 default_bits = 2048
@@ -264,7 +272,7 @@ req_extensions = v3_req
 countryName = Country Name (2 letter code)
 [ v3_req ]
 basicConstraints = CA:FALSE
-subjectAltName = '.$san.'
+subjectAltName = ' . $san . '
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
 
         $csr = openssl_csr_new(
@@ -281,12 +289,20 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
             )
         );
 
-        if (!$csr) throw new \RuntimeException("CSR couldn't be generated! ".openssl_error_string());
+        if (!$csr) throw new \RuntimeException("CSR couldn't be generated! " . openssl_error_string());
 
         openssl_csr_export($csr, $csr);
         fclose($tmpConf);
 
-        file_put_contents($this->getDomainPath($domain)."/last.csr", $csr);
+        $csrPath = $this->getDomainPath($domain) . "/last.csr";
+        file_put_contents($csrPath, $csr);
+
+        return $this->getCsrContent($csrPath);
+    }
+
+    private function getCsrContent($csrPath) {
+        $csr = file_get_contents($csrPath);
+
         preg_match('~REQUEST-----(.*)-----END~s', $csr, $matches);
 
         return trim(Base64UrlSafeEncoder::encode(base64_decode($matches[1])));
