@@ -9,6 +9,7 @@ class Lescript
     public $license = 'https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf';
     public $countryCode = 'CZ';
     public $state = "Czech Republic";
+    public $contactMail = "my@mailaddress.cz";
 
     private $certificatesDir;
     private $webRootDir;
@@ -245,7 +246,7 @@ class Lescript
 
         return $this->signedRequest(
             '/acme/new-reg',
-            array('resource' => 'new-reg', 'agreement' => $this->license)
+            array('resource' => 'new-reg', 'contact' => array('mailto:'.$this->contactMail), 'agreement' => $this->license)
         );
     }
 
