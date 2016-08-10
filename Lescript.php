@@ -67,6 +67,10 @@ class Lescript
                 "/acme/new-authz",
                 array("resource" => "new-authz", "identifier" => array("type" => "dns", "value" => $domain))
             );
+            
+            if(empty($response['challenges'])) {
+                throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
+            }
 
             // choose http-01 challange only
             $challenge = array_reduce($response['challenges'], function ($v, $w) {
