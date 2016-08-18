@@ -14,6 +14,9 @@ try {
     $le = new Analogic\ACME\Lescript('/certificate/storage', '/var/www/test.com', $logger);
     # or without logger:
     # $le = new Analogic\ACME\Lescript('/certificate/storage', '/var/www/test.com');
+
+    $le->contact = array('mailto:test@test.com'); // optional
+
     $le->initAccount();
     $le->signDomains(array('test.com', 'www.test.com'));
 
