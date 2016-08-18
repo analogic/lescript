@@ -9,6 +9,9 @@ class Lescript
     public $license = 'https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf';
     public $countryCode = 'CZ';
     public $state = "Czech Republic";
+    public $challenge = 'http-01'; // http-01 challange only
+    public $contact = array(); // optional
+    // public $contact = array("mailto:cert-admin@example.com", "tel:+12025551212")
 
     private $certificatesDir;
     private $webRootDir;
@@ -18,12 +21,12 @@ class Lescript
     private $client;
     private $accountKeyPath;
 
-    public function __construct($certificatesDir, $webRootDir, $logger = null)
+    public function __construct($certificatesDir, $webRootDir, $logger = null, ClientInterface $client = null)
     {
         $this->certificatesDir = $certificatesDir;
         $this->webRootDir = $webRootDir;
         $this->logger = $logger;
-        $this->client = new Client($this->ca);
+        $this->client = $client ? $client : new Client($this->ca);
         $this->accountKeyPath = $certificatesDir . '/_account/private.pem';
     }
 
@@ -72,9 +75,9 @@ class Lescript
                 throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
             }
 
-            // choose http-01 challange only
-            $challenge = array_reduce($response['challenges'], function ($v, $w) {
-                return $v ? $v : ($w['type'] == 'http-01' ? $w : false);
+            $self = $this;
+            $challenge = array_reduce($response['challenges'], function ($v, $w) use (&$self) {
+                return $v ? $v : ($w['type'] == $self->challenge ? $w : false);
             });
             if (!$challenge) throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
 
@@ -123,7 +126,7 @@ class Lescript
                 $challenge['uri'],
                 array(
                     "resource" => "challenge",
-                    "type" => "http-01",
+                    "type" => $this->challenge,
                     "keyAuthorization" => $payload,
                     "token" => $challenge['token']
                 )
@@ -247,9 +250,14 @@ class Lescript
     {
         $this->log('Sending registration to letsencrypt server');
 
+        $data = array('resource' => 'new-reg', 'agreement' => $this->license);
+        if(!$this->contact) {
+            $data['contact'] = $this->contact;
+        }
+
         return $this->signedRequest(
             '/acme/new-reg',
-            array('resource' => 'new-reg', 'agreement' => $this->license)
+            $data
         );
     }
 
@@ -379,7 +387,59 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
     }
 }
 
-class Client
+interface ClientInterface
+{
+    /**
+     * Constructor
+     *
+     * @param string $base the ACME API base all relative requests are sent to
+     */
+    public function __construct($base);
+    /**
+     * Send a POST request
+     *
+     * @param string $url URL to post to
+     * @param array $data fields to sent via post
+     * @return array|string the parsed JSON response, raw response on error
+     */
+    public function post($url, $data);
+    /**
+     * @param string $url URL to request via get
+     * @return array|string the parsed JSON response, raw response on error
+     */
+    public function get($url);
+    /**
+     * Returns the Replay-Nonce header of the last request
+     *
+     * if no request has been made, yet. A GET on $base/directory is done and the
+     * resulting nonce returned
+     *
+     * @return mixed
+     */
+    public function getLastNonce();
+    /**
+     * Return the Location header of the last request
+     *
+     * returns null if last request had no location header
+     *
+     * @return string|null
+     */
+    public function getLastLocation();
+    /**
+     * Return the HTTP status code of the last request
+     *
+     * @return int
+     */
+    public function getLastCode();
+    /**
+     * Get all Link headers of the last request
+     *
+     * @return string[]
+     */
+    public function getLastLinks();
+}
+
+class Client implements ClientInterface
 {
     private $lastCode;
     private $lastHeader;
