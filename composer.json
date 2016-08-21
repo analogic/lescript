@@ -24,8 +24,8 @@
     "phpunit/phpunit": "5.5.*"
   },
   "autoload": {
-    "files": ["Lescript.php"],
     "psr-4": {
+      "Analogic\\ACME\\": "src",
       "Analogic\\ACME\\test\\": "test"
     }
   }
