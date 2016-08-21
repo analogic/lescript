@@ -8,25 +8,31 @@ use Psr\Log\NullLogger;
 
 class Lescript_test extends TestCase
 {
+    /** @var  Lescript */
+    protected $lescript;
+
+    public function setUp()
+    {
+        parent::setUp();
+        $this->lescript = new Lescript($this->certdir, $this->root, new NullLogger());
+        $this->lescript->ca = Lescript::API_TEST;
+        $this->lescript->initAccount();
+    }
 
     public function test_initAccount()
     {
-        $lescript = new Lescript($this->certdir, $this->root, new NullLogger());
-        $lescript->initAccount();
+        // account init happened in setup already
         $this->assertFileExists($this->certdir . '/_account/private.pem');
         $this->assertFileExists($this->certdir . '/_account/public.pem');
 
         // existing key should not be overwritten
         $md5 = md5(file_get_contents($this->certdir . '/_account/private.pem'));
-        $lescript->initAccount();
+        $this->lescript->initAccount();
         $this->assertEquals($md5, md5(file_get_contents($this->certdir . '/_account/private.pem')));
     }
 
     public function test_Sign() {
-        $lescript = new Lescript($this->certdir, $this->root, new NullLogger());
-        $lescript->initAccount();
-
-        $lescript->signDomains(array($this->hosts[0]));
+        $this->lescript->signDomains(array($this->hosts[0]));
 
         $outdir = $this->certdir.'/'.$this->hosts[0];
         $this->assertFileExists($outdir.'/cert.pem');
@@ -47,10 +53,7 @@ class Lescript_test extends TestCase
     }
 
     public function test_SAN() {
-        $lescript = new Lescript($this->certdir, $this->root, new NullLogger());
-        $lescript->initAccount();
-
-        $lescript->signDomains($this->hosts);
+        $this->lescript->signDomains($this->hosts);
 
         $outdir = $this->certdir.'/'.$this->hosts[0];
         $this->assertFileExists($outdir.'/cert.pem');

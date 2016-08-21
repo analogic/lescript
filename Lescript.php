@@ -4,8 +4,14 @@ namespace Analogic\ACME;
 
 class Lescript
 {
-    public $ca = 'https://acme-v01.api.letsencrypt.org';
-    // public $ca = 'https://acme-staging.api.letsencrypt.org'; // testing
+    /** the public API to get real certificates */
+    const API_LE = 'https://acme-v01.api.letsencrypt.org';
+    /** the test API for testing the client */
+    const API_TEST = 'https://acme-staging.api.letsencrypt.org';
+
+    /** @var string The API to use */
+    public $ca = self::API_LE;
+
     public $license = 'https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf';
     public $countryCode = 'CZ';
     public $state = "Czech Republic";
