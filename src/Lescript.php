@@ -8,24 +8,35 @@ class Lescript
     const API_LE = 'https://acme-v01.api.letsencrypt.org';
     /** the test API for testing the client */
     const API_TEST = 'https://acme-staging.api.letsencrypt.org';
+    /** default license agreement */
+    const LICENSE = 'https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf';
 
     /** @var string The API to use */
     public $ca = self::API_LE;
 
-    public $license = 'https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf';
-    public $countryCode = 'CZ';
-    public $state = "Czech Republic";
-    public $challenge = 'http-01'; // http-01 challange only
-    public $contact = array(); // optional
-    // public $contact = array("mailto:cert-admin@example.com", "tel:+12025551212")
+    /** @var string the challenge type to verify domains. http-01 only currently */
+    public $challenge = 'http-01';
 
+    /** @var string the license the user agreed to */
+    public $license = self::LICENSE;
+    /** @var string the country code, the user is registering from */
+    public $countryCode = 'CZ';
+    /** @var string the country, the user is registering from */
+    public $state = "Czech Republic";
+    /** @var array contact details of the user (optiona). eg: array("mailto:cert-admin@example.com", "tel:+12025551212") */
+    public $contact = array(); // optional
+
+    /** @var string where to store certificates */
     protected $certificatesDir;
+    /** @var string where to place challenge tokens (parent of .well-known/acme-challenge/) */
     protected $webRootDir;
+    /** @var string defaults to $certificatesDir/_account/private.pem */
+    protected $accountKeyPath;
 
     /** @var \Psr\Log\LoggerInterface */
     protected $logger;
+    /** @var ClientInterface */
     protected $client;
-    protected $accountKeyPath;
 
     /**
      * Lescript constructor.
