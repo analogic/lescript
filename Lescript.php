@@ -9,6 +9,9 @@ class Lescript
     public $license = 'https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf';
     public $countryCode = 'CZ';
     public $state = "Czech Republic";
+    public $challenge = 'http-01'; // http-01 challange only
+    public $contact = array(); // optional
+    // public $contact = array("mailto:cert-admin@example.com", "tel:+12025551212")
 
     private $certificatesDir;
     private $webRootDir;
@@ -23,11 +26,7 @@ class Lescript
         $this->certificatesDir = $certificatesDir;
         $this->webRootDir = $webRootDir;
         $this->logger = $logger;
-        if($client !== null) {
-            $this->client = $client;
-        } else {
-            $this->client = new Client($this->ca);
-        }
+        $this->client = $client ? $client : new Client($this->ca);
         $this->accountKeyPath = $certificatesDir . '/_account/private.pem';
     }
 
@@ -76,9 +75,9 @@ class Lescript
                 throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
             }
 
-            // choose http-01 challange only
-            $challenge = array_reduce($response['challenges'], function ($v, $w) {
-                return $v ? $v : ($w['type'] == 'http-01' ? $w : false);
+            $self = $this;
+            $challenge = array_reduce($response['challenges'], function ($v, $w) use (&$self) {
+                return $v ? $v : ($w['type'] == $self->challenge ? $w : false);
             });
             if (!$challenge) throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
 
@@ -127,7 +126,7 @@ class Lescript
                 $challenge['uri'],
                 array(
                     "resource" => "challenge",
-                    "type" => "http-01",
+                    "type" => $this->challenge,
                     "keyAuthorization" => $payload,
                     "token" => $challenge['token']
                 )
@@ -251,9 +250,14 @@ class Lescript
     {
         $this->log('Sending registration to letsencrypt server');
 
+        $data = array('resource' => 'new-reg', 'agreement' => $this->license);
+        if(!$this->contact) {
+            $data['contact'] = $this->contact;
+        }
+
         return $this->signedRequest(
             '/acme/new-reg',
-            array('resource' => 'new-reg', 'agreement' => $this->license)
+            $data
         );
     }
 
@@ -391,7 +395,6 @@ interface ClientInterface
      * @param string $base the ACME API base all relative requests are sent to
      */
     public function __construct($base);
-
     /**
      * Send a POST request
      *
@@ -400,13 +403,11 @@ interface ClientInterface
      * @return array|string the parsed JSON response, raw response on error
      */
     public function post($url, $data);
-
     /**
      * @param string $url URL to request via get
      * @return array|string the parsed JSON response, raw response on error
      */
     public function get($url);
-
     /**
      * Returns the Replay-Nonce header of the last request
      *
@@ -416,7 +417,6 @@ interface ClientInterface
      * @return mixed
      */
     public function getLastNonce();
-
     /**
      * Return the Location header of the last request
      *
@@ -425,14 +425,12 @@ interface ClientInterface
      * @return string|null
      */
     public function getLastLocation();
-
     /**
      * Return the HTTP status code of the last request
      *
      * @return int
      */
     public function getLastCode();
-
     /**
      * Get all Link headers of the last request
      *
@@ -440,7 +438,6 @@ interface ClientInterface
      */
     public function getLastLinks();
 }
-
 
 class Client implements ClientInterface
 {
