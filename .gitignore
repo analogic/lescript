@@ -1,3 +1,7 @@
 .idea/
 composer.lock
 vendor
+/test/core/ngrok/
+/test/certs/
+/test/webroot/
+/composer.phar
