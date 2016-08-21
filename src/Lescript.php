@@ -82,7 +82,6 @@ class Lescript
      *
      * @param string[] $domains the domains to sign
      * @param bool $reuseCsr should a previously generated CSR be reused?
-     * @todo this method should be split
      */
     public function signDomains(array $domains, $reuseCsr = false)
     {
@@ -95,98 +94,7 @@ class Lescript
         // ----------------------------
 
         foreach ($domains as $domain) {
-
-            // 1. getting available authentication options
-            // -------------------------------------------
-
-            $this->log("Requesting challenge for $domain");
-
-            $response = $this->signedRequest(
-                "/acme/new-authz",
-                array("resource" => "new-authz", "identifier" => array("type" => "dns", "value" => $domain))
-            );
-
-            if (empty($response['challenges'])) {
-                throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
-            }
-
-            $self = $this;
-            $challenge = array_reduce($response['challenges'], function ($v, $w) use (&$self) {
-                return $v ? $v : ($w['type'] == $self->challenge ? $w : false);
-            });
-            if (!$challenge) {
-                throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
-            }
-
-            $this->log("Got challenge token for $domain");
-            $location = $this->client->getLastLocation();
-
-            // 2. saving authentication token for web verification
-            // ---------------------------------------------------
-
-            $directory = $this->webRootDir . '/.well-known/acme-challenge';
-            $tokenPath = $directory . '/' . $challenge['token'];
-
-            if (!file_exists($directory) && !@mkdir($directory, 0755, true)) {
-                throw new \RuntimeException("Couldn't create directory to expose challenge: ${tokenPath}");
-            }
-
-            $header = array(
-                // need to be in precise order!
-                "e" => Base64UrlSafeEncoder::encode($accountKeyDetails["rsa"]["e"]),
-                "kty" => "RSA",
-                "n" => Base64UrlSafeEncoder::encode($accountKeyDetails["rsa"]["n"])
-
-            );
-            $payload = $challenge['token'] . '.' . Base64UrlSafeEncoder::encode(hash('sha256', json_encode($header),
-                    true));
-
-            file_put_contents($tokenPath, $payload);
-            chmod($tokenPath, 0644);
-
-            // 3. verification process itself
-            // -------------------------------
-
-            $uri = "http://${domain}/.well-known/acme-challenge/${challenge['token']}";
-
-            $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
-
-            // simple self check
-            if ($payload !== trim(@file_get_contents($uri))) {
-                throw new \RuntimeException("Please check $uri - token not available");
-            }
-
-            $this->log("Sending request to challenge");
-
-            // send request to challenge
-            $result = $this->signedRequest(
-                $challenge['uri'],
-                array(
-                    "resource" => "challenge",
-                    "type" => $this->challenge,
-                    "keyAuthorization" => $payload,
-                    "token" => $challenge['token']
-                )
-            );
-
-            // waiting loop
-            do {
-                if (empty($result['status']) || $result['status'] == "invalid") {
-                    throw new \RuntimeException("Verification ended with error: " . json_encode($result));
-                }
-                $ended = !($result['status'] === "pending");
-
-                if (!$ended) {
-                    $this->log("Verification pending, sleeping 1s");
-                    sleep(1);
-                }
-
-                $result = $this->client->get($location);
-
-            } while (!$ended);
-
-            $this->log("Verification ended with status: ${result['status']}");
-            @unlink($tokenPath);
+            $this->verifyDomain($domain, $accountKeyDetails);
         }
 
         // requesting certificate
@@ -264,6 +172,109 @@ class Lescript
         file_put_contents($domainPath . "/chain.pem", implode("\n", $certificates));
 
         $this->log("Done !!§§!");
+    }
+
+    /**
+     * Handles the whole http-01 challenge to verify a domain
+     *
+     * @param string $domain the domain to verify
+     * @param array $accountKeyDetails private key infos @see \openssl_pkey_get_details()
+     */
+    protected function verifyDomain($domain, $accountKeyDetails)
+    {
+
+        // 1. getting available authentication options
+        // -------------------------------------------
+
+        $this->log("Requesting challenge for $domain");
+
+        $response = $this->signedRequest(
+            "/acme/new-authz",
+            array("resource" => "new-authz", "identifier" => array("type" => "dns", "value" => $domain))
+        );
+
+        if (empty($response['challenges'])) {
+            throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
+        }
+
+        $self = $this;
+        $challenge = array_reduce($response['challenges'], function ($v, $w) use (&$self) {
+            return $v ? $v : ($w['type'] == $self->challenge ? $w : false);
+        });
+        if (!$challenge) {
+            throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
+        }
+
+        $this->log("Got challenge token for $domain");
+        $location = $this->client->getLastLocation();
+
+        // 2. saving authentication token for web verification
+        // ---------------------------------------------------
+
+        $directory = $this->webRootDir . '/.well-known/acme-challenge';
+        $tokenPath = $directory . '/' . $challenge['token'];
+
+        if (!file_exists($directory) && !@mkdir($directory, 0755, true)) {
+            throw new \RuntimeException("Couldn't create directory to expose challenge: ${tokenPath}");
+        }
+
+        $header = array(
+            // need to be in precise order!
+            "e" => Base64UrlSafeEncoder::encode($accountKeyDetails["rsa"]["e"]),
+            "kty" => "RSA",
+            "n" => Base64UrlSafeEncoder::encode($accountKeyDetails["rsa"]["n"])
+
+        );
+        $payload = $challenge['token'] . '.' . Base64UrlSafeEncoder::encode(hash('sha256', json_encode($header),
+                true));
+
+        file_put_contents($tokenPath, $payload);
+        chmod($tokenPath, 0644);
+
+        // 3. verification process itself
+        // -------------------------------
+
+        $uri = "http://${domain}/.well-known/acme-challenge/${challenge['token']}";
+
+        $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
+
+        // simple self check
+        if ($payload !== trim(@file_get_contents($uri))) {
+            throw new \RuntimeException("Please check $uri - token not available");
+        }
+
+        $this->log("Sending request to challenge");
+
+        // send request to challenge
+        $result = $this->signedRequest(
+            $challenge['uri'],
+            array(
+                "resource" => "challenge",
+                "type" => $this->challenge,
+                "keyAuthorization" => $payload,
+                "token" => $challenge['token']
+            )
+        );
+
+        // waiting loop
+        do {
+            if (empty($result['status']) || $result['status'] == "invalid") {
+                throw new \RuntimeException("Verification ended with error: " . json_encode($result));
+            }
+            $ended = !($result['status'] === "pending");
+
+            if (!$ended) {
+                $this->log("Verification pending, sleeping 1s");
+                sleep(1);
+            }
+
+            $result = $this->client->get($location);
+
+        } while (!$ended);
+
+        $this->log("Verification ended with status: ${result['status']}");
+        @unlink($tokenPath);
+
     }
 
     /**
