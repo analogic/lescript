@@ -4,8 +4,8 @@ namespace Analogic\ACME;
 
 class Lescript
 {
-    //public $ca = 'https://acme-v01.api.letsencrypt.org';
-    public $ca = 'https://acme-staging.api.letsencrypt.org'; // testing
+    public $ca = 'https://acme-v01.api.letsencrypt.org';
+    //public $ca = 'https://acme-staging.api.letsencrypt.org'; // testing
     public $countryCode = 'CZ';
     public $state = "Czech Republic";
     public $challenge = 'http-01'; // http-01 challange only
