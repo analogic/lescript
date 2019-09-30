@@ -2,10 +2,13 @@
 
 namespace Analogic\ACME;
 
+use \RuntimeException;
+use \Psr\Log\LoggerInterface;
+
 class Lescript
 {
-    public $ca = 'https://acme-v01.api.letsencrypt.org';
-    //public $ca = 'https://acme-staging.api.letsencrypt.org'; // testing
+    public $ca = 'https://acme-v02.api.letsencrypt.org';
+    //public $ca = 'https://acme-staging-v02.api.letsencrypt.org'; // testing
     public $countryCode = 'CZ';
     public $state = "Czech Republic";
     public $challenge = 'http-01'; // http-01 challange only
@@ -15,10 +18,16 @@ class Lescript
     private $certificatesDir;
     private $webRootDir;
 
-    /** @var \Psr\Log\LoggerInterface */
+    /** @var LoggerInterface */
     private $logger;
+    /** @var ClientInterface */
     private $client;
     private $accountKeyPath;
+
+    private $accountId = '';
+    private $urlNewAccount = '';
+    private $urlNewNonce = '';
+    private $urlNewOrder = '';
 
     public function __construct($certificatesDir, $webRootDir, $logger = null, ClientInterface $client = null)
     {
@@ -31,6 +40,8 @@ class Lescript
 
     public function initAccount()
     {
+        $this->initCommunication();
+
         if (!is_file($this->accountKeyPath)) {
 
             // generate and save new private key for account
@@ -40,12 +51,33 @@ class Lescript
             $this->generateKey(dirname($this->accountKeyPath));
             $this->postNewReg();
             $this->log('New account certificate registered');
-
         } else {
-
             $this->log('Account already registered. Continuing.');
-
+            $this->getAccountId();
         }
+
+        if (empty($this->accountId)) {
+            throw new RuntimeException("We don't have account ID");
+        }
+
+        $this->log("Account: ".$this->accountId);
+    }
+
+    public function initCommunication()
+    {
+        $this->log('Getting list of URLs for API');
+
+        $directory = $this->client->get('/directory');
+        if (!isset($directory['newNonce']) || !isset($directory['newAccount']) || !isset($directory['newOrder'])) {
+            throw new RuntimeException("Missing setup urls");
+        }
+
+        $this->urlNewNonce = $directory['newNonce'];
+        $this->urlNewAccount = $directory['newAccount'];
+        $this->urlNewOrder = $directory['newOrder'];
+
+        $this->log('Requesting new nonce for client communication');
+        $this->client->get($this->urlNewNonce);
     }
 
     public function signDomains(array $domains, $reuseCsr = false)
@@ -58,40 +90,42 @@ class Lescript
         // start domains authentication
         // ----------------------------
 
-        foreach ($domains as $domain) {
+        $this->log("Requesting challenge for ".join(', ', $domains));
+        $response = $this->signedRequest(
+            $this->urlNewOrder,
+            array("identifiers" => array_map(
+                function ($domain) { return array("type" => "dns", "value" => $domain);}, 
+                $domains
+                ))
+        );
+        $nonce = $this->client->getLastNonce();
+        $finalizeUrl = $response['finalize'];
 
-            // 1. getting available authentication options
-            // -------------------------------------------
+        foreach ($response['authorizations'] as $authz) {
+            // 1. getting authentication requirements
+            // --------------------------------------
 
-            $this->log("Requesting challenge for $domain");
-
-            $response = $this->signedRequest(
-                "/acme/new-authz",
-                array("resource" => "new-authz", "identifier" => array("type" => "dns", "value" => $domain))
-            );
-            
+            $response = $this->client->get($authz);
+            $domain = $response['identifier']['value'];
             if(empty($response['challenges'])) {
-                throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
+                throw new RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
             }
 
             $self = $this;
             $challenge = array_reduce($response['challenges'], function ($v, $w) use (&$self) {
                 return $v ? $v : ($w['type'] == $self->challenge ? $w : false);
             });
-            if (!$challenge) throw new \RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
+            if (!$challenge) throw new RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
 
             $this->log("Got challenge token for $domain");
-            $location = $this->client->getLastLocation();
-
 
             // 2. saving authentication token for web verification
             // ---------------------------------------------------
-
             $directory = $this->webRootDir . '/.well-known/acme-challenge';
             $tokenPath = $directory . '/' . $challenge['token'];
 
             if (!file_exists($directory) && !@mkdir($directory, 0755, true)) {
-                throw new \RuntimeException("Couldn't create directory to expose challenge: ${tokenPath}");
+                throw new RuntimeException("Couldn't create directory to expose challenge: ${tokenPath}");
             }
 
             $header = array(
@@ -114,27 +148,25 @@ class Lescript
             $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
 
             // simple self check
-            if ($payload !== trim(@file_get_contents($uri))) {
-                throw new \RuntimeException("Please check $uri - token not available");
-            }
+            ////if ($payload !== trim(@file_get_contents($uri))) {
+            ////    throw new RuntimeException("Please check $uri - token not available");
+            ////}
 
             $this->log("Sending request to challenge");
+                
 
             // send request to challenge
             $result = $this->signedRequest(
-                $challenge['uri'],
-                array(
-                    "resource" => "challenge",
-                    "type" => $this->challenge,
-                    "keyAuthorization" => $payload,
-                    "token" => $challenge['token']
-                )
+                $challenge['url'],
+                array("keyAuthorization" => $payload),
+                $nonce
             );
-
-            // waiting loop
+            
+            // waiting loop    
+            $loop = 0;
             do {
                 if (empty($result['status']) || $result['status'] == "invalid") {
-                    throw new \RuntimeException("Verification ended with error: " . json_encode($result));
+                    throw new RuntimeException("Verification ended with error: " . json_encode($result));
                 }
                 $ended = !($result['status'] === "pending");
 
@@ -142,16 +174,21 @@ class Lescript
                     $this->log("Verification pending, sleeping 1s");
                     sleep(1);
                 }
+                
+                if ($loop > 5) {
+                    throw new RuntimeException("Verification timed out");
+                }
 
-                $result = $this->client->get($location);
-
+                $result = $this->signedRequest($challenge['url'], "");
+                $loop++;
             } while (!$ended);
 
             $this->log("Verification ended with status: ${result['status']}");
-            @unlink($tokenPath);
-        }
 
-        // requesting certificate
+            @unlink($tokenPath);
+        } 
+
+                // requesting certificate
         // ----------------------
         $domainPath = $this->getDomainPath(reset($domains));
 
@@ -169,22 +206,20 @@ class Lescript
             $this->getCsrContent($domainPath . "/last.csr") :
             $this->generateCSR($privateDomainKey, $domains);
 
-        // request certificates creation
-        $result = $this->signedRequest(
-            "/acme/new-cert",
-            array('resource' => 'new-cert', 'csr' => $csr)
-        );
-        if ($this->client->getLastCode() !== 201) {
-            throw new \RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($result));
+        $finalizeResponse = $this->signedRequest($finalizeUrl, array('csr' => $csr));
+
+        if ($this->client->getLastCode() > 299 || $this->client->getLastCode() < 200) {
+            throw new RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($finalizeResponse));
         }
-        $location = $this->client->getLastLocation();
+        
+        $location = $finalizeResponse['certificate'];
 
         // waiting loop
         $certificates = array();
         while (1) {
             $this->client->getLastLinks();
 
-            $result = $this->client->get($location);
+            $result = $this->signedRequest($location, "");
 
             if ($this->client->getLastCode() == 202) {
 
@@ -206,12 +241,12 @@ class Lescript
                 break;
             } else {
 
-                throw new \RuntimeException("Can't get certificate: HTTP code " . $this->client->getLastCode());
+                throw new RuntimeException("Can't get certificate: HTTP code " . $this->client->getLastCode());
 
             }
         }
 
-        if (empty($certificates)) throw new \RuntimeException('No certificates generated');
+        if (empty($certificates)) throw new RuntimeException('No certificates generated');
 
         $this->log("Saving fullchain.pem");
         file_put_contents($domainPath . '/fullchain.pem', implode("\n", $certificates));
@@ -228,7 +263,7 @@ class Lescript
     private function readPrivateKey($path)
     {
         if (($key = openssl_pkey_get_private('file://' . $path)) === FALSE) {
-            throw new \RuntimeException(openssl_error_string());
+            throw new RuntimeException(openssl_error_string());
         }
 
         return $key;
@@ -245,16 +280,16 @@ class Lescript
         return $this->certificatesDir . '/' . $domain . '/';
     }
 
+    private function getAccountId()
+    {
+        return $this->postNewReg();
+    }
+
     private function postNewReg()
     {
-        $this->log('Getting last terms of service URL');
-
-        $directory = $this->client->get('/directory');
-        if (!isset($directory['meta']) || !isset($directory['meta']['terms-of-service'])) {
-            throw new \RuntimeException("No terms of service link available!");
-        }
-
-        $data = array('resource' => 'new-reg', 'agreement' => $directory['meta']['terms-of-service']);
+        $data = array(
+            'termsOfServiceAgreed' => true
+        );
 
         $this->log('Sending registration to letsencrypt server');
 
@@ -262,10 +297,15 @@ class Lescript
             $data['contact'] = $this->contact;
         }
 
-        return $this->signedRequest(
-            '/acme/new-reg',
+        $response = $this->signedRequest(
+            $this->urlNewAccount,
             $data
         );
+        $lastLocation = $this->client->getLastLocation();
+        if (!empty($lastLocation)) {
+            $this->accountId = $lastLocation;
+        }
+        return $response;
     }
 
     private function generateCSR($privateKey, array $domains)
@@ -308,7 +348,7 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
             )
         );
 
-        if (!$csr) throw new \RuntimeException("CSR couldn't be generated! " . openssl_error_string());
+        if (!$csr) throw new RuntimeException("CSR couldn't be generated! " . openssl_error_string());
 
         openssl_csr_export($csr, $csr);
         fclose($tmpConf);
@@ -335,37 +375,40 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
         ));
 
         if(!openssl_pkey_export($res, $privateKey)) {
-            throw new \RuntimeException("Key export failed!");
+            throw new RuntimeException("Key export failed!");
         }
 
         $details = openssl_pkey_get_details($res);
 
         if(!is_dir($outputDirectory)) @mkdir($outputDirectory, 0700, true);
-        if(!is_dir($outputDirectory)) throw new \RuntimeException("Cant't create directory $outputDirectory");
+        if(!is_dir($outputDirectory)) throw new RuntimeException("Cant't create directory $outputDirectory");
 
         file_put_contents($outputDirectory.'/private.pem', $privateKey);
         file_put_contents($outputDirectory.'/public.pem', $details['key']);
     }
 
-    private function signedRequest($uri, array $payload)
+    private function signedRequest($uri, $payload, $nonce = null)
     {
         $privateKey = $this->readPrivateKey($this->accountKeyPath);
         $details = openssl_pkey_get_details($privateKey);
 
-        $header = array(
+        $protected = array(
             "alg" => "RS256",
-            "jwk" => array(
+            "nonce" => $nonce ? $nonce : $this->client->getLastNonce(),
+            "url" => $uri
+        );
+
+        if ($this->accountId) {
+            $protected["kid"] = $this->accountId;
+        } else {
+            $protected["jwk"] = array(
                 "kty" => "RSA",
                 "n" => Base64UrlSafeEncoder::encode($details["rsa"]["n"]),
                 "e" => Base64UrlSafeEncoder::encode($details["rsa"]["e"]),
-            )
-        );
+            );
+        }
 
-        $protected = $header;
-        $protected["nonce"] = $this->client->getLastNonce();
-
-
-        $payload64 = Base64UrlSafeEncoder::encode(str_replace('\\/', '/', json_encode($payload)));
+        $payload64 = Base64UrlSafeEncoder::encode(empty($payload) ? "" : str_replace('\\/', '/', json_encode($payload)));
         $protected64 = Base64UrlSafeEncoder::encode(json_encode($protected));
 
         openssl_sign($protected64.'.'.$payload64, $signed, $privateKey, "SHA256");
@@ -373,7 +416,6 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
         $signed64 = Base64UrlSafeEncoder::encode($signed);
 
         $data = array(
-            'header' => $header,
             'protected' => $protected64,
             'payload' => $payload64,
             'signature' => $signed64
@@ -460,7 +502,7 @@ class Client implements ClientInterface
 
     private function curl($method, $url, $data = null)
     {
-        $headers = array('Accept: application/json', 'Content-Type: application/json');
+        $headers = array('Accept: application/json', 'Content-Type: application/jose+json');
         $handle = curl_init();
         curl_setopt($handle, CURLOPT_URL, preg_match('~^http~', $url) ? $url : $this->base.$url);
         curl_setopt($handle, CURLOPT_HTTPHEADER, $headers);
@@ -482,7 +524,7 @@ class Client implements ClientInterface
         $response = curl_exec($handle);
 
         if(curl_errno($handle)) {
-            throw new \RuntimeException('Curl: '.curl_error($handle));
+            throw new RuntimeException('Curl: '.curl_error($handle));
         }
 
         $header_size = curl_getinfo($handle, CURLINFO_HEADER_SIZE);
@@ -492,6 +534,10 @@ class Client implements ClientInterface
 
         $this->lastHeader = $header;
         $this->lastCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+
+        if ($this->lastCode >= 300 && $this->lastCode < 200) {
+            throw new RuntimeException($this->lastCode."\n".$body);
+        }
 
         $data = json_decode($body, true);
         return $data === null ? $body : $data;
@@ -509,12 +555,11 @@ class Client implements ClientInterface
 
     public function getLastNonce()
     {
-        if(preg_match('~Replay\-Nonce: (.+)~i', $this->lastHeader, $matches)) {
+        if(preg_match('~Replay-Nonce: (.+)~i', $this->lastHeader, $matches)) {
             return trim($matches[1]);
         }
-
-        $this->curl('GET', '/directory');
-        return $this->getLastNonce();
+        
+        throw new RuntimeException("We don't have nonce");
     }
 
     public function getLastLocation()
@@ -542,15 +587,5 @@ class Base64UrlSafeEncoder
     public static function encode($input)
     {
         return str_replace('=', '', strtr(base64_encode($input), '+/', '-_'));
-    }
-
-    public static function decode($input)
-    {
-        $remainder = strlen($input) % 4;
-        if ($remainder) {
-            $padlen = 4 - $remainder;
-            $input .= str_repeat('=', $padlen);
-        }
-        return base64_decode(strtr($input, '-_', '+/'));
     }
 }
