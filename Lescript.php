@@ -266,7 +266,7 @@ class Lescript
 
     private function parseFirstPemFromBody($body)
     {
-        preg_match('~(-----BEGIN.*?END CERTIFICATE-----)~', $body, $matches);
+        preg_match('~(-----BEGIN.*?END CERTIFICATE-----)~s', $body, $matches);
 
         return $matches[1];
     }
