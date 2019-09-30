@@ -98,14 +98,14 @@ class Lescript
                 $domains
                 ))
         );
-        $nonce = $this->client->getLastNonce();
+
         $finalizeUrl = $response['finalize'];
 
         foreach ($response['authorizations'] as $authz) {
             // 1. getting authentication requirements
             // --------------------------------------
 
-            $response = $this->client->get($authz);
+            $response = $this->signedRequest($authz, "");
             $domain = $response['identifier']['value'];
             if(empty($response['challenges'])) {
                 throw new RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
@@ -148,40 +148,40 @@ class Lescript
             $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
 
             // simple self check
-            ////if ($payload !== trim(@file_get_contents($uri))) {
-            ////    throw new RuntimeException("Please check $uri - token not available");
-            ////}
+            if ($payload !== trim(@file_get_contents($uri))) {
+                throw new RuntimeException("Please check $uri - token not available");
+            }
 
             $this->log("Sending request to challenge");
                 
 
             // send request to challenge
-            $result = $this->signedRequest(
-                $challenge['url'],
-                array("keyAuthorization" => $payload),
-                $nonce
-            );
-            
-            // waiting loop    
-            $loop = 0;
-            do {
+            $allowed_loops = 5;
+            $result = null;
+            while ($allowed_loops > 0) {
+
+                $result = $this->signedRequest(
+                    $challenge['url'],
+                    array("keyAuthorization" => $payload)
+                );
+
                 if (empty($result['status']) || $result['status'] == "invalid") {
                     throw new RuntimeException("Verification ended with error: " . json_encode($result));
                 }
-                $ended = !($result['status'] === "pending");
 
-                if (!$ended) {
-                    $this->log("Verification pending, sleeping 1s");
-                    sleep(1);
-                }
-                
-                if ($loop > 5) {
-                    throw new RuntimeException("Verification timed out");
+                if ($result['status'] != "pending") {
+                    break;
                 }
 
-                $result = $this->signedRequest($challenge['url'], "");
-                $loop++;
-            } while (!$ended);
+                $this->log("Verification pending, sleeping 1s");
+                sleep(1);
+
+                $allowed_loops--;
+            }
+
+            if ($allowed_loops == 0 && $result['status'] === "pending") {
+                throw new RuntimeException("Verification timed out");
+            }
 
             $this->log("Verification ended with status: ${result['status']}");
 
@@ -229,14 +229,9 @@ class Lescript
             } else if ($this->client->getLastCode() == 200) {
 
                 $this->log("Got certificate! YAY!");
-                $certificates[] = $this->parsePemFromBody($result);
-
-
-                foreach ($this->client->getLastLinks() as $link) {
-                    $this->log("Requesting chained cert at $link");
-                    $result = $this->client->get($link);
-                    $certificates[] = $this->parsePemFromBody($result);
-                }
+                $serverCert = $this->parseFirstPemFromBody($result);
+                $certificates[] = $serverCert;
+                $certificates[] = substr($result, strlen($serverCert)); // rest of ca certs
 
                 break;
             } else {
@@ -269,10 +264,11 @@ class Lescript
         return $key;
     }
 
-    private function parsePemFromBody($body)
+    private function parseFirstPemFromBody($body)
     {
-        $pem = chunk_split(base64_encode($body), 64, "\n");
-        return "-----BEGIN CERTIFICATE-----\n" . $pem . "-----END CERTIFICATE-----\n";
+        preg_match('~(-----BEGIN.*?END CERTIFICATE-----)~', $body, $matches);
+
+        return $matches[1];
     }
 
     private function getDomainPath($domain)
@@ -587,5 +583,15 @@ class Base64UrlSafeEncoder
     public static function encode($input)
     {
         return str_replace('=', '', strtr(base64_encode($input), '+/', '-_'));
+    }
+
+    public static function decode($input)
+    {
+        $remainder = strlen($input) % 4;
+        if ($remainder) {
+            $padlen = 4 - $remainder;
+            $input .= str_repeat('=', $padlen);
+        }
+        return base64_decode(strtr($input, '-_', '+/'));
     }
 }
