@@ -289,7 +289,7 @@ class Lescript
 
         $this->log('Sending registration to letsencrypt server');
 
-        if(!$this->contact) {
+        if($this->contact) {
             $data['contact'] = $this->contact;
         }
 
