@@ -531,7 +531,7 @@ class Client implements ClientInterface
         $this->lastHeader = $header;
         $this->lastCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
 
-        if ($this->lastCode >= 300 && $this->lastCode < 200) {
+        if ($this->lastCode >= 400 && $this->lastCode < 600) {
             throw new RuntimeException($this->lastCode."\n".$body);
         }
 
