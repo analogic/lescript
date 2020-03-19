@@ -156,7 +156,7 @@ class Lescript
                 
 
             // send request to challenge
-            $allowed_loops = 5;
+            $allowed_loops = 30;
             $result = null;
             while ($allowed_loops > 0) {
 
