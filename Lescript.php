@@ -173,8 +173,27 @@ class Lescript
                     break;
                 }
 
-                $this->log("Verification pending, sleeping 1s");
-                sleep(1);
+                switch ($allowed_loops) {
+                    case 5:
+                        $sleepTime = 1;
+                        break;
+                    case 4:
+                        $sleepTime = 5;
+                        break;
+                    case 3:
+                        $sleepTime = 10;
+                        break;
+                    case 2:
+                        $sleepTime = 20;
+                        break;
+                    case 1:
+                        $sleepTime = 30;
+                        break;
+                    default:
+                        $sleepTime = 1;
+                }
+                $this->log("Verification pending, sleeping ".$sleepTime."s");
+                sleep($sleepTime);
 
                 $allowed_loops--;
             }
