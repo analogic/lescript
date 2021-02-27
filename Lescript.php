@@ -94,7 +94,7 @@ class Lescript
         $response = $this->signedRequest(
             $this->urlNewOrder,
             array("identifiers" => array_map(
-                function ($domain) { return array("type" => "dns", "value" => $domain);}, 
+                function ($domain) { return array("type" => "dns", "value" => $domain);},
                 $domains
                 ))
         );
@@ -147,13 +147,8 @@ class Lescript
 
             $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
 
-            // simple self check
-            if ($payload !== trim(@file_get_contents($uri))) {
-                throw new RuntimeException("Please check $uri - token not available");
-            }
-
             $this->log("Sending request to challenge");
-                
+
 
             // send request to challenge
             $allowed_loops = 30;
@@ -186,7 +181,7 @@ class Lescript
             $this->log("Verification ended with status: ${result['status']}");
 
             @unlink($tokenPath);
-        } 
+        }
 
                 // requesting certificate
         // ----------------------
@@ -211,7 +206,7 @@ class Lescript
         if ($this->client->getLastCode() > 299 || $this->client->getLastCode() < 200) {
             throw new RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($finalizeResponse));
         }
-        
+
         $location = $finalizeResponse['certificate'];
 
         // waiting loop
@@ -554,7 +549,7 @@ class Client implements ClientInterface
         if(preg_match('~Replay-Nonce: (.+)~i', $this->lastHeader, $matches)) {
             return trim($matches[1]);
         }
-        
+
         throw new RuntimeException("We don't have nonce");
     }
 
