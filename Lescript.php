@@ -212,7 +212,34 @@ class Lescript
             throw new RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($finalizeResponse));
         }
         
-        $location = $finalizeResponse['certificate'];
+        $maxAllowedLoops = 6;
+        $loopCount = 1;
+        while ($maxAllowedLoops > 0) {
+            $this->log("Firing Order Status Request Nr. ". $loopCount . " to: ".$orderStatusUrl);
+            $OrderStatusResponse = $this->signedRequest($orderStatusUrl, "");
+
+            if (($this->client->getLastCode() > 299 || $this->client->getLastCode() < 200)) {
+                throw new RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($OrderStatusResponse));
+            }
+
+            if (($OrderStatusResponse['status'] == "valid" && !empty($OrderStatusResponse['certificate']))) {
+                $this->log("Order Status: ".$OrderStatusResponse['status']);
+                $location = $OrderStatusResponse['certificate'];
+                break;
+            }
+
+            $sleepTime = ($allowed_loops-($allowed_loops-$loopCount))*$loopCount; //1 4 9 16 25 36
+            $loopCount++;
+
+            $this->log("Order Status not 'valid' yet but '".$OrderStatusResponse['status']."', sleeping ".$sleepTime."s");
+            sleep($sleepTime);
+
+            $maxAllowedLoops--;
+        }
+
+        if ($maxAllowedLoops == 0) {
+            throw new RuntimeException("Certificate generation processing timed out (Status not 'valid')");
+        }
 
         // waiting loop
         $certificates = array();
