@@ -215,8 +215,8 @@ class Lescript
         $maxAllowedLoops = 6;
         $loopCount = 1;
         while ($maxAllowedLoops > 0) {
-            $this->log("Firing Order Status Request Nr. ". $loopCount . " to: ".$orderStatusUrl);
-            $OrderStatusResponse = $this->signedRequest($orderStatusUrl, "");
+            $this->log("Firing Order Status Request Nr. ". $loopCount . " to: ".$this->client->getLastLocation());
+            $OrderStatusResponse = $this->signedRequest($this->client->getLastLocation(), "");
 
             if (($this->client->getLastCode() > 299 || $this->client->getLastCode() < 200)) {
                 throw new RuntimeException("Invalid response code: " . $this->client->getLastCode() . ", " . json_encode($OrderStatusResponse));
