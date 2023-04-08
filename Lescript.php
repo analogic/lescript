@@ -156,7 +156,8 @@ class Lescript
                 
 
             // send request to challenge
-            $allowed_loops = 5;
+            $allowed_loops = 6;
+            $loopCount = 1;
             $result = null;
             while ($allowed_loops > 0) {
 
@@ -173,25 +174,9 @@ class Lescript
                     break;
                 }
 
-                switch ($allowed_loops) {
-                    case 5:
-                        $sleepTime = 1;
-                        break;
-                    case 4:
-                        $sleepTime = 5;
-                        break;
-                    case 3:
-                        $sleepTime = 10;
-                        break;
-                    case 2:
-                        $sleepTime = 20;
-                        break;
-                    case 1:
-                        $sleepTime = 30;
-                        break;
-                    default:
-                        $sleepTime = 1;
-                }
+                $sleepTime = ($allowed_loops-($allowed_loops-$loopCount))*$loopCount; //1 4 9 16 25 36
+                $loopCount++;
+                
                 $this->log("Verification pending, sleeping ".$sleepTime."s");
                 sleep($sleepTime);
 
