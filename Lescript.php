@@ -94,7 +94,7 @@ class Lescript
         $response = $this->signedRequest(
             $this->urlNewOrder,
             array("identifiers" => array_map(
-                function ($domain) { return array("type" => "dns", "value" => $domain);}, 
+                function ($domain) { return array("type" => "dns", "value" => $domain);},
                 $domains
                 ))
         );
@@ -146,12 +146,6 @@ class Lescript
             $uri = "http://${domain}/.well-known/acme-challenge/${challenge['token']}";
 
             $this->log("Token for $domain saved at $tokenPath and should be available at $uri");
-
-            // simple self check
-            if ($payload !== trim(@file_get_contents($uri))) {
-                throw new RuntimeException("Please check $uri - token not available");
-            }
-
             $this->log("Sending request to challenge");
 
             // send request to challenge
@@ -185,9 +179,9 @@ class Lescript
             $this->log("Verification ended with status: ${result['status']}");
 
             @unlink($tokenPath);
-        } 
+        }
 
-                // requesting certificate
+        // requesting certificate
         // ----------------------
         $domainPath = $this->getDomainPath(reset($domains));
 
@@ -227,7 +221,7 @@ class Lescript
                 break;
             }
 
-            $sleepTime = ($allowed_loops-($allowed_loops-$loopCount))*$loopCount; //1 4 9 16 25 36
+            $sleepTime = $loopCount * $loopCount; // 1 4 9 16 25 36
             $loopCount++;
 
             $this->log("Order Status not 'valid' yet but '".$OrderStatusResponse['status']."', sleeping ".$sleepTime."s");
