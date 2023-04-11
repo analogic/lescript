@@ -60,7 +60,7 @@ class Lescript
             throw new RuntimeException("We don't have account ID");
         }
 
-        $this->log("Account: ".$this->accountId);
+        $this->log("Account: " . $this->accountId);
     }
 
     public function initCommunication()
@@ -90,13 +90,15 @@ class Lescript
         // start domains authentication
         // ----------------------------
 
-        $this->log("Requesting challenge for ".join(', ', $domains));
+        $this->log("Requesting challenge for " . join(', ', $domains));
         $response = $this->signedRequest(
             $this->urlNewOrder,
             array("identifiers" => array_map(
-                function ($domain) { return array("type" => "dns", "value" => $domain);},
+                function ($domain) {
+                    return array("type" => "dns", "value" => $domain);
+                },
                 $domains
-                ))
+            ))
         );
 
         $finalizeUrl = $response['finalize'];
@@ -107,8 +109,8 @@ class Lescript
 
             $response = $this->signedRequest($authz, "");
             $domain = $response['identifier']['value'];
-            if(empty($response['challenges'])) {
-                throw new RuntimeException("HTTP Challenge for $domain is not available. Whole response: ".json_encode($response));
+            if (empty($response['challenges'])) {
+                throw new RuntimeException("HTTP Challenge for $domain is not available. Whole response: " . json_encode($response));
             }
 
             $self = $this;
@@ -170,7 +172,7 @@ class Lescript
                 $sleepTime = $loopCount * $loopCount; // 1 4 9 16 25 36
                 $loopCount++;
 
-                $this->log("Verification pending, sleeping ".$sleepTime."s");
+                $this->log("Verification pending, sleeping " . $sleepTime . "s");
                 sleep($sleepTime);
             }
 
@@ -197,7 +199,7 @@ class Lescript
 
         $this->client->getLastLinks();
 
-        $csr = $reuseCsr && is_file($domainPath . "/last.csr")?
+        $csr = $reuseCsr && is_file($domainPath . "/last.csr") ?
             $this->getCsrContent($domainPath . "/last.csr") :
             $this->generateCSR($privateDomainKey, $domains);
 
@@ -210,7 +212,7 @@ class Lescript
         $maxAllowedLoops = 6;
         $loopCount = 1;
         while ($loopCount < $maxAllowedLoops) {
-            $this->log("Firing Order Status Request Nr. ". $loopCount . " to: ".$this->client->getLastLocation());
+            $this->log("Firing Order Status Request Nr. " . $loopCount . " to: " . $this->client->getLastLocation());
             $OrderStatusResponse = $this->signedRequest($this->client->getLastLocation(), "");
 
             if (($this->client->getLastCode() > 299 || $this->client->getLastCode() < 200)) {
@@ -218,7 +220,7 @@ class Lescript
             }
 
             if (($OrderStatusResponse['status'] == "valid" && !empty($OrderStatusResponse['certificate']))) {
-                $this->log("Order Status: ".$OrderStatusResponse['status']);
+                $this->log("Order Status: " . $OrderStatusResponse['status']);
                 $location = $OrderStatusResponse['certificate'];
                 break;
             }
@@ -226,7 +228,7 @@ class Lescript
             $sleepTime = $loopCount * $loopCount; // 1 4 9 16 25 36
             $loopCount++;
 
-            $this->log("Order Status not 'valid' yet but '".$OrderStatusResponse['status']."', sleeping ".$sleepTime."s");
+            $this->log("Order Status not 'valid' yet but '" . $OrderStatusResponse['status'] . "', sleeping " . $sleepTime . "s");
             sleep($sleepTime);
         }
 
@@ -309,7 +311,7 @@ class Lescript
 
         $this->log('Sending registration to letsencrypt server');
 
-        if($this->contact) {
+        if ($this->contact) {
             $data['contact'] = $this->contact;
         }
 
@@ -375,7 +377,8 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
         return $this->getCsrContent($csrPath);
     }
 
-    protected function getCsrContent($csrPath) {
+    protected function getCsrContent($csrPath)
+    {
         $csr = file_get_contents($csrPath);
 
         preg_match('~REQUEST-----(.*)-----END~s', $csr, $matches);
@@ -390,17 +393,17 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
             "private_key_bits" => 4096,
         ));
 
-        if(!openssl_pkey_export($res, $privateKey)) {
+        if (!openssl_pkey_export($res, $privateKey)) {
             throw new RuntimeException("Key export failed!");
         }
 
         $details = openssl_pkey_get_details($res);
 
-        if(!is_dir($outputDirectory)) @mkdir($outputDirectory, 0700, true);
-        if(!is_dir($outputDirectory)) throw new RuntimeException("Cant't create directory $outputDirectory");
+        if (!is_dir($outputDirectory)) @mkdir($outputDirectory, 0700, true);
+        if (!is_dir($outputDirectory)) throw new RuntimeException("Cant't create directory $outputDirectory");
 
-        file_put_contents($outputDirectory.'/private.pem', $privateKey);
-        file_put_contents($outputDirectory.'/public.pem', $details['key']);
+        file_put_contents($outputDirectory . '/private.pem', $privateKey);
+        file_put_contents($outputDirectory . '/public.pem', $details['key']);
     }
 
     protected function signedRequest($uri, $payload, $nonce = null)
@@ -427,7 +430,7 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
         $payload64 = Base64UrlSafeEncoder::encode(empty($payload) ? "" : str_replace('\\/', '/', json_encode($payload)));
         $protected64 = Base64UrlSafeEncoder::encode(json_encode($protected));
 
-        openssl_sign($protected64.'.'.$payload64, $signed, $privateKey, "SHA256");
+        openssl_sign($protected64 . '.' . $payload64, $signed, $privateKey, "SHA256");
 
         $signed64 = Base64UrlSafeEncoder::encode($signed);
 
@@ -444,10 +447,10 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment');
 
     protected function log($message)
     {
-        if($this->logger) {
+        if ($this->logger) {
             $this->logger->info($message);
         } else {
-            echo $message."\n";
+            echo $message . "\n";
         }
     }
 }
@@ -460,6 +463,7 @@ interface ClientInterface
      * @param string $base the ACME API base all relative requests are sent to
      */
     public function __construct($base);
+
     /**
      * Send a POST request
      *
@@ -468,11 +472,13 @@ interface ClientInterface
      * @return array|string the parsed JSON response, raw response on error
      */
     public function post($url, $data);
+
     /**
      * @param string $url URL to request via get
      * @return array|string the parsed JSON response, raw response on error
      */
     public function get($url);
+
     /**
      * Returns the Replay-Nonce header of the last request
      *
@@ -482,6 +488,7 @@ interface ClientInterface
      * @return mixed
      */
     public function getLastNonce();
+
     /**
      * Return the Location header of the last request
      *
@@ -490,12 +497,14 @@ interface ClientInterface
      * @return string|null
      */
     public function getLastLocation();
+
     /**
      * Return the HTTP status code of the last request
      *
      * @return int
      */
     public function getLastCode();
+
     /**
      * Get all Link headers of the last request
      *
@@ -520,7 +529,7 @@ class Client implements ClientInterface
     {
         $headers = array('Accept: application/json', 'Content-Type: application/jose+json');
         $handle = curl_init();
-        curl_setopt($handle, CURLOPT_URL, preg_match('~^http~', $url) ? $url : $this->base.$url);
+        curl_setopt($handle, CURLOPT_URL, preg_match('~^http~', $url) ? $url : $this->base . $url);
         curl_setopt($handle, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($handle, CURLOPT_HEADER, true);
@@ -539,8 +548,8 @@ class Client implements ClientInterface
         }
         $response = curl_exec($handle);
 
-        if(curl_errno($handle)) {
-            throw new RuntimeException('Curl: '.curl_error($handle));
+        if (curl_errno($handle)) {
+            throw new RuntimeException('Curl: ' . curl_error($handle));
         }
 
         $header_size = curl_getinfo($handle, CURLINFO_HEADER_SIZE);
@@ -552,7 +561,7 @@ class Client implements ClientInterface
         $this->lastCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
 
         if ($this->lastCode >= 400 && $this->lastCode < 600) {
-            throw new RuntimeException($this->lastCode."\n".$body);
+            throw new RuntimeException($this->lastCode . "\n" . $body);
         }
 
         $data = json_decode($body, true);
@@ -571,16 +580,16 @@ class Client implements ClientInterface
 
     public function getLastNonce()
     {
-        if(preg_match('~Replay-Nonce: (.+)~i', $this->lastHeader, $matches)) {
+        if (preg_match('~Replay-Nonce: (.+)~i', $this->lastHeader, $matches)) {
             return trim($matches[1]);
         }
-        
+
         throw new RuntimeException("We don't have nonce");
     }
 
     public function getLastLocation()
     {
-        if(preg_match('~Location: (.+)~i', $this->lastHeader, $matches)) {
+        if (preg_match('~Location: (.+)~i', $this->lastHeader, $matches)) {
             return trim($matches[1]);
         }
         return null;

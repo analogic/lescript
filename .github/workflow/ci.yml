@@ -12,4 +12,5 @@ jobs:
       - name: PHPStan Static Analysis
         uses: php-actions/phpstan@v3
         with:
+          level: 3
           path: Lescript.php

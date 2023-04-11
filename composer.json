@@ -21,7 +21,8 @@
     "ext-openssl": "*"
   },
   "require-dev": {
-    "psr/log": "^1"
+    "psr/log": "^1",
+    "phpstan/phpstan": "^1.10"
   },
   "autoload": {
     "files": ["Lescript.php"]
