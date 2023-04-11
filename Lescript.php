@@ -15,6 +15,8 @@ class Lescript
     public $contact = array(); // optional
     // public $contact = array("mailto:cert-admin@example.com", "tel:+12025551212")
 
+    public $clientUserAgent = "analogic-lescript/0.3.0";
+    
     protected $certificatesDir;
     protected $webRootDir;
 
@@ -34,7 +36,7 @@ class Lescript
         $this->certificatesDir = $certificatesDir;
         $this->webRootDir = $webRootDir;
         $this->logger = $logger;
-        $this->client = $client ? $client : new Client($this->ca);
+        $this->client = $client ? $client : new Client($this->ca, $this->clientUserAgent);
         $this->accountKeyPath = $certificatesDir . '/_account/private.pem';
     }
 
@@ -65,6 +67,7 @@ class Lescript
 
     public function initCommunication()
     {
+        $this->log('ACME Client: '.$this->clientUserAgent);
         $this->log('Getting list of URLs for API');
 
         $directory = $this->client->get('/directory');
@@ -461,8 +464,9 @@ interface ClientInterface
      * Constructor
      *
      * @param string $base the ACME API base all relative requests are sent to
+     * @param string $userAgent ACME Client User-Agent
      */
-    public function __construct($base);
+    public function __construct($base, $userAgent);
 
     /**
      * Send a POST request
@@ -519,10 +523,12 @@ class Client implements ClientInterface
     protected $lastHeader;
 
     protected $base;
+    protected $userAgent;
 
-    public function __construct($base)
+    public function __construct($base, $userAgent)
     {
         $this->base = $base;
+        $this->userAgent = $userAgent;
     }
 
     protected function curl($method, $url, $data = null)
@@ -533,6 +539,7 @@ class Client implements ClientInterface
         curl_setopt($handle, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($handle, CURLOPT_HEADER, true);
+        curl_setopt($handle, CURLOPT_USERAGENT, $this->userAgent);
 
         // DO NOT DO THAT!
         // curl_setopt($handle, CURLOPT_SSL_VERIFYHOST, false);
